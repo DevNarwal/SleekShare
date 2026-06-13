@@ -997,6 +997,7 @@ Active = joined_at <= expense_date AND (left_at IS NULL OR left_at >= expense_da
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-06-13 | Initial document generation from prototype + decisions |
+| 1.1.0 | 2026-06-13 | Phase 2: Database Schema Design complete; updated schema.prisma with native PostgreSQL mappings and successfully executed migration. |
 
 ---
 

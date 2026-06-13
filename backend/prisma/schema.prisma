@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
@@ -9,10 +9,278 @@ datasource db {
 }
 
 model User {
-  id           String   @id
-  email        String   @unique
-  passwordHash String
-  displayName  String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String         @unique @db.VarChar(255)
+  passwordHash   String         @map("password_hash") @db.VarChar(255)
+  displayName    String         @map("display_name") @db.VarChar(100)
+  avatarInitials String?        @map("avatar_initials") @db.Char(2)
+  avatarColor    String?        @map("avatar_color") @db.VarChar(7)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  refreshTokens      RefreshToken[]
+  groupsCreated      Group[]              @relation("GroupsCreated")
+  memberships        Membership[]
+  expensesPaid       Expense[]            @relation("ExpensesPaid")
+  expensesCreated    Expense[]            @relation("ExpensesCreated")
+  expenseParticipant ExpenseParticipant[]
+  settlementsSent    Settlement[]         @relation("SettlementsSent")
+  settlementsRecv    Settlement[]         @relation("SettlementsReceived")
+  settlementsCreated Settlement[]         @relation("SettlementsCreated")
+  ledgerDebts        LedgerEntry[]        @relation("DebtorLedger")
+  ledgerCredits      LedgerEntry[]        @relation("CreditorLedger")
+  ledgerCreated      LedgerEntry[]        @relation("LedgerCreated")
+  importJobs         ImportJob[]
+  anomaliesResolved  ImportAnomaly[]
+  messages           Message[]
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Group {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String        @db.VarChar(255)
+  icon        String?       @db.VarChar(10)
+  createdBy   String        @map("created_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+  creator     User          @relation("GroupsCreated", fields: [createdBy], references: [id])
+  memberships Membership[]
+  expenses    Expense[]
+  settlements Settlement[]
+  ledgerEntries LedgerEntry[]
+  importJobs  ImportJob[]
+  auditLogs   AuditLog[]
+
+  @@map("groups")
+}
+
+model Membership {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId   String    @map("group_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  role      String    @default("member") @db.VarChar(20)
+  joinedAt  DateTime  @map("joined_at") @db.Timestamptz
+  leftAt    DateTime? @map("left_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId, joinedAt])
+  @@map("memberships")
+}
+
+model Currency {
+  code              String         @id @db.Char(3)
+  name              String         @db.VarChar(50)
+  symbol            String         @db.VarChar(5)
+  isBase            Boolean        @default(false) @map("is_base")
+  fromExchangeRates ExchangeRate[] @relation("FromCurrency")
+  toExchangeRates   ExchangeRate[] @relation("ToCurrency")
+  expenses          Expense[]
+
+  @@map("currencies")
+}
+
+model ExchangeRate {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromCode  String   @map("from_code") @db.Char(3)
+  toCode    String   @map("to_code") @db.Char(3)
+  rate      Decimal  @db.Decimal(18, 6)
+  rateDate  DateTime @map("rate_date") @db.Date
+  source    String   @default("manual") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  
+  fromCurrency Currency @relation("FromCurrency", fields: [fromCode], references: [code])
+  toCurrency   Currency @relation("ToCurrency", fields: [toCode], references: [code])
+
+  @@unique([fromCode, toCode, rateDate])
+  @@map("exchange_rates")
+}
+
+model Expense {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId        String               @map("group_id") @db.Uuid
+  description    String               @db.VarChar(500)
+  amountOriginal Decimal              @map("amount_original") @db.Decimal(18, 2)
+  currencyCode   String               @map("currency_code") @db.Char(3)
+  exchangeRate   Decimal              @default(1.0) @map("exchange_rate") @db.Decimal(18, 6)
+  amountBaseInr  Decimal              @map("amount_base_inr") @db.Decimal(18, 2)
+  paidBy         String               @map("paid_by") @db.Uuid
+  expenseDate    DateTime             @map("expense_date") @db.Date
+  splitMethod    String               @map("split_method") @db.VarChar(20)
+  category       String?              @db.VarChar(50)
+  notes          String?
+  flags          String[]             @default([])
+  isDeleted      Boolean              @default(false) @map("is_deleted")
+  importJobId    String?              @map("import_job_id") @db.Uuid
+  createdBy      String               @map("created_by") @db.Uuid
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  currency     Currency             @relation(fields: [currencyCode], references: [code])
+  payer        User                 @relation("ExpensesPaid", fields: [paidBy], references: [id])
+  creator      User                 @relation("ExpensesCreated", fields: [createdBy], references: [id])
+  importJob    ImportJob?           @relation(fields: [importJobId], references: [id])
+  participants ExpenseParticipant[]
+  messages     Message[]
+  importRows   ImportRow[]
+
+  @@map("expenses")
+}
+
+model ExpenseParticipant {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  expenseId      String  @map("expense_id") @db.Uuid
+  userId         String  @map("user_id") @db.Uuid
+  shareAmountInr Decimal @map("share_amount_inr") @db.Decimal(18, 2)
+  shareUnits     Decimal? @map("share_units") @db.Decimal(18, 4)
+  isSettled      Boolean @default(false) @map("is_settled")
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+  @@map("expense_participants")
+}
+
+model Settlement {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId        String   @map("group_id") @db.Uuid
+  fromUserId     String   @map("from_user_id") @db.Uuid
+  toUserId       String   @map("to_user_id") @db.Uuid
+  amountInr      Decimal  @map("amount_inr") @db.Decimal(18, 2)
+  settlementDate DateTime @map("settlement_date") @db.Date
+  note           String?
+  isDeleted      Boolean  @default(false) @map("is_deleted")
+  createdBy      String   @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromUser User  @relation("SettlementsSent", fields: [fromUserId], references: [id])
+  toUser   User  @relation("SettlementsReceived", fields: [toUserId], references: [id])
+  creator  User  @relation("SettlementsCreated", fields: [createdBy], references: [id])
+
+  @@map("settlements")
+}
+
+model LedgerEntry {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId   String   @map("group_id") @db.Uuid
+  entryType String   @map("entry_type") @db.VarChar(50)
+  debtorId  String   @map("debtor_id") @db.Uuid
+  creditorId String  @map("creditor_id") @db.Uuid
+  amountInr Decimal  @map("amount_inr") @db.Decimal(18, 2)
+  entryDate DateTime @map("entry_date") @db.Date
+  note      String?
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  debtor   User  @relation("DebtorLedger", fields: [debtorId], references: [id])
+  creditor User  @relation("CreditorLedger", fields: [creditorId], references: [id])
+  creator  User  @relation("LedgerCreated", fields: [createdBy], references: [id])
+
+  @@map("ledger_entries")
+}
+
+model ImportJob {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId      String    @map("group_id") @db.Uuid
+  uploadedBy   String    @map("uploaded_by") @db.Uuid
+  filename     String    @db.VarChar(255)
+  fileHash     String    @map("file_hash") @db.VarChar(64)
+  totalRows    Int       @default(0) @map("total_rows")
+  cleanRows    Int       @default(0) @map("clean_rows")
+  anomalyRows  Int       @default(0) @map("anomaly_rows")
+  importedRows Int       @default(0) @map("imported_rows")
+  status       String    @default("pending") @db.VarChar(20)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz
+
+  group      Group       @relation(fields: [groupId], references: [id])
+  uploader   User        @relation(fields: [uploadedBy], references: [id])
+  importRows ImportRow[]
+  expenses   Expense[]
+
+  @@map("import_jobs")
+}
+
+model ImportRow {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId            String    @map("job_id") @db.Uuid
+  rowNumber        Int       @map("row_number")
+  rawData          Json      @map("raw_data")
+  parsedData       Json?     @map("parsed_data")
+  status           String    @default("pending") @db.VarChar(20)
+  createdExpenseId String?   @map("created_expense_id") @db.Uuid
+
+  job            ImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdExpense Expense?  @relation(fields: [createdExpenseId], references: [id])
+  anomalies      ImportAnomaly[]
+
+  @@map("import_rows")
+}
+
+model ImportAnomaly {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rowId        String    @map("row_id") @db.Uuid
+  anomalyType  String    @map("anomaly_type") @db.VarChar(50)
+  severity     String    @db.VarChar(10)
+  detail       String
+  suggestedFix String?   @map("suggested_fix")
+  resolvedBy   String?   @map("resolved_by") @db.Uuid
+  resolution   String?   @db.VarChar(20)
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz
+
+  row      ImportRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  resolver User?     @relation(fields: [resolvedBy], references: [id])
+
+  @@map("import_anomalies")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId    String?  @map("group_id") @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  eventType  String   @map("event_type") @db.VarChar(50)
+  entityType String?  @map("entity_type") @db.VarChar(50)
+  entityId   String?  @map("entity_id") @db.Uuid
+  metadata   Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  group Group? @relation(fields: [groupId], references: [id])
+  actor User   @relation(fields: [actorId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Message {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  expenseId String   @map("expense_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  content   String
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@map("messages")
 }
