@@ -8,7 +8,7 @@ describe('GroupsService', () => {
   let prisma: PrismaService;
 
   const mockPrismaService = {
-    $transaction: jest.fn((cb) => cb(mockPrismaService)),
+    $transaction: jest.fn(),
     group: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -24,6 +24,7 @@ describe('GroupsService', () => {
       findUnique: jest.fn(),
     },
   };
+  mockPrismaService.$transaction.mockImplementation((cb: any) => cb(mockPrismaService));
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
