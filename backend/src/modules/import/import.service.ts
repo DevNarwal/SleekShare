@@ -335,6 +335,8 @@ export class ImportService {
         throw new BadRequestException('Invalid date in parsed row');
       }
 
+      let rowStatus = 'approved';
+
       // Apply resolutions
       if (dto.resolutions && dto.resolutions.length > 0) {
         for (const res of dto.resolutions) {
@@ -413,6 +415,42 @@ export class ImportService {
               // Remove participant
               parsed.participants.splice(ignoredParticipantIndex, 1);
             }
+          } else if (res.action === ResolutionAction.MAP_MEMBER) {
+            if (!res.mappedUserId) {
+              throw new BadRequestException('mappedUserId is required for MAP_MEMBER resolution');
+            }
+            if (anomaly.detail.toLowerCase().includes('payer') || anomaly.detail.toLowerCase().includes(parsed.paidBy?.toLowerCase() || '')) {
+              parsed.paidByUserId = res.mappedUserId;
+            } else {
+              for (const p of parsed.participants) {
+                if (anomaly.detail.toLowerCase().includes(p.nameOrEmail.toLowerCase())) {
+                  p.userId = res.mappedUserId;
+                  break;
+                }
+              }
+            }
+          } else if (res.action === ResolutionAction.ENTER_EXCHANGE_RATE) {
+            if (!res.rate || isNaN(res.rate) || res.rate <= 0) {
+              throw new BadRequestException('A valid exchange rate is required for ENTER_EXCHANGE_RATE resolution');
+            }
+            parsed.exchangeRate = res.rate;
+          } else if (res.action === ResolutionAction.REMAP_SPLIT_METHOD || res.action === ResolutionAction.AUTO_ADJUST_SPLIT) {
+            parsed.splitMethod = 'equal';
+          } else if (res.action === ResolutionAction.REJECT_AND_CREATE_SETTLEMENT) {
+            rowStatus = 'rejected';
+            if (!res.fromUserId || !res.toUserId || !res.amountInr || !res.date) {
+              throw new BadRequestException('Missing payload for REJECT_AND_CREATE_SETTLEMENT resolution');
+            }
+            await tx.settlement.create({
+              data: {
+                groupId,
+                fromUserId: res.fromUserId,
+                toUserId: res.toUserId,
+                amountInr: new Decimal(res.amountInr),
+                settlementDate: new Date(res.date),
+                createdBy: userId,
+              },
+            });
           }
 
           // Mark anomaly as resolved in database
@@ -431,7 +469,7 @@ export class ImportService {
       const updatedRow = await tx.importRow.update({
         where: { id: rowId },
         data: {
-          status: 'approved',
+          status: rowStatus,
           parsedData: parsed,
         },
         include: { anomalies: true },
@@ -514,13 +552,17 @@ export class ImportService {
     let exchangeRate = new Decimal(1.0);
     const currencyCode = parsed.currency.toUpperCase();
     if (currencyCode !== 'INR') {
-      const match = await this.prisma.exchangeRate.findFirst({
-        where: { fromCode: currencyCode, toCode: 'INR', rateDate: expenseDate },
-      });
-      if (!match) {
-        throw new BadRequestException(`No exchange rate found for ${currencyCode} on ${parsed.date}`);
+      if (parsed.exchangeRate && !isNaN(Number(parsed.exchangeRate))) {
+        exchangeRate = new Decimal(Number(parsed.exchangeRate));
+      } else {
+        const match = await this.prisma.exchangeRate.findFirst({
+          where: { fromCode: currencyCode, toCode: 'INR', rateDate: expenseDate },
+        });
+        if (!match) {
+          throw new BadRequestException(`No exchange rate found for ${currencyCode} on ${parsed.date}`);
+        }
+        exchangeRate = new Decimal(Number(match.rate));
       }
-      exchangeRate = new Decimal(Number(match.rate));
     }
 
     const amountOriginal = new Decimal(parsed.amount);
@@ -804,22 +846,72 @@ export class ImportService {
     const warningOrCleanRows = job.importRows.filter((r) => {
       if (r.status !== 'pending') return false;
       const hasErrors = r.anomalies.some((a) => a.severity === 'error');
-      // Timeline warnings like INACTIVE_MEMBER require explicit CREATE_IMPORT_MEMBERSHIP resolution,
-      // so approveAll will only approve rows that have no timeline warnings OR where timeline warning resolutions
-      // aren't needed, but let's check: can we auto-resolve timeline warnings?
-      // No, they require explicit resolution payload. So approveAll will skip rows with INACTIVE_MEMBER/PARTICIPANT_MISMATCH
-      // unless they've been pre-resolved. But it will approve all rows that have zero unresolved anomalies, or simple warning overrides (duplicates, future dates).
-      const hasTimelineWarnings = r.anomalies.some(
-        (a) => a.anomalyType === 'INACTIVE_MEMBER' || a.anomalyType === 'PARTICIPANT_MISMATCH'
-      );
-
-      return !hasErrors && !hasTimelineWarnings;
+      return !hasErrors;
     });
 
     await this.prisma.$transaction(async (tx) => {
       for (const row of warningOrCleanRows) {
-        // Resolve simple warning anomalies as approved
+        const parsed = row.parsedData as any;
+        const expenseDate = parseLocalDate(parsed.date);
+        let rowStatus = 'approved';
+
         for (const a of row.anomalies) {
+          if (a.resolution) continue; // Skip already resolved
+
+          if (a.anomalyType === 'PRE_MEMBERSHIP_DATE' || a.anomalyType === 'INACTIVE_MEMBER') {
+            // Default: CREATE_IMPORT_MEMBERSHIP
+            let targetUserId: string | null = null;
+            if (parsed.paidByUserId) {
+              targetUserId = parsed.paidByUserId;
+            }
+            for (const p of parsed.participants) {
+              if (p.userId && a.detail.toLowerCase().includes(p.nameOrEmail.toLowerCase())) {
+                targetUserId = p.userId;
+                break;
+              }
+            }
+
+            if (targetUserId && expenseDate) {
+              const nextMembership = await tx.membership.findFirst({
+                where: { groupId, userId: targetUserId, joinedAt: { gt: expenseDate } },
+                orderBy: { joinedAt: 'asc' },
+              });
+              const leftAt = nextMembership ? new Date(nextMembership.joinedAt.getTime() - 1000) : null;
+
+              await tx.membership.create({
+                data: {
+                  groupId,
+                  userId: targetUserId,
+                  joinedAt: expenseDate,
+                  leftAt,
+                  source: 'IMPORT_RESOLUTION',
+                },
+              });
+            }
+          } else if (a.anomalyType === 'FUTURE_DATE' || a.anomalyType === 'FOREIGN_CURRENCY') {
+            // Approve
+          } else if (a.anomalyType === 'DUPLICATE_EXPENSE' || a.anomalyType === 'DUPLICATE_SETTLEMENT') {
+            // Reject Row
+            rowStatus = 'rejected';
+          } else if (a.anomalyType === 'SETTLEMENT_AS_EXPENSE') {
+            // Keep for manual review, do not default
+            continue;
+          } else if (a.anomalyType === 'PARTICIPANT_MISMATCH') {
+            // Default: Ignore participant
+            let ignoredParticipantIndex = -1;
+            for (let i = 0; i < parsed.participants.length; i++) {
+              const p = parsed.participants[i];
+              if (a.detail.toLowerCase().includes(p.nameOrEmail.toLowerCase())) {
+                ignoredParticipantIndex = i;
+                break;
+              }
+            }
+            if (ignoredParticipantIndex !== -1) {
+              parsed.participants.splice(ignoredParticipantIndex, 1);
+            }
+          }
+
+          // Mark anomaly resolved
           await tx.importAnomaly.update({
             where: { id: a.id },
             data: {
@@ -832,7 +924,10 @@ export class ImportService {
 
         await tx.importRow.update({
           where: { id: row.id },
-          data: { status: 'approved' },
+          data: {
+            status: rowStatus,
+            parsedData: parsed,
+          },
         });
 
         this.eventsGateway.emitToRoom(`group:${groupId}`, 'import.row.approved', { groupId, jobId, rowId: row.id });
@@ -877,4 +972,49 @@ export class ImportService {
 
     return importedCount;
   }
+
+  // Reject all rows containing errors
+  async rejectAllErrors(groupId: string, jobId: string, userId: string) {
+    const job = await this.prisma.importJob.findFirst({
+      where: { id: jobId, groupId },
+      include: {
+        importRows: {
+          include: { anomalies: true },
+        },
+      },
+    });
+
+    if (!job) {
+      throw new NotFoundException('Import job not found');
+    }
+
+    const errorRows = job.importRows.filter(
+      (r) => r.status === 'pending' && r.anomalies.some((a) => a.severity === 'error')
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const row of errorRows) {
+        for (const a of row.anomalies) {
+          await tx.importAnomaly.update({
+            where: { id: a.id },
+            data: {
+              resolution: 'rejected',
+              resolvedBy: userId,
+              resolvedAt: new Date(),
+            },
+          });
+        }
+
+        await tx.importRow.update({
+          where: { id: row.id },
+          data: { status: 'rejected' },
+        });
+
+        this.eventsGateway.emitToRoom(`group:${groupId}`, 'import.row.rejected', { groupId, jobId, rowId: row.id });
+      }
+    });
+
+    return errorRows.length;
+  }
 }
+

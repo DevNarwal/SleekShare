@@ -110,7 +110,7 @@ export default function DashboardPage() {
             {groups && groups.map((group: any) => (
               <Link
                 key={group.id}
-                href={`/groups/${group.id}`}
+                href={`/groups/${group.slug}`}
                 className="group block rounded-2xl border border-slate-200 bg-white p-6 transition hover:border-[#047857]/50 hover:shadow-md relative overflow-hidden"
               >
                 <div className="flex items-center justify-between mb-4">

@@ -26,6 +26,7 @@ export class ExpensesController {
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('member') member?: string,
+    @Query('category') category?: string,
     @Query('flags') flagsString?: string,
     @Query('month') month?: string,
   ) {
@@ -35,6 +36,7 @@ export class ExpensesController {
       limit: limit ? parseInt(limit, 10) : undefined,
       search,
       member,
+      category,
       flags,
       month,
     });

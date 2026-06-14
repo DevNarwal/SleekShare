@@ -152,6 +152,7 @@ export class ExpensesService {
       limit?: number;
       search?: string;
       member?: string;
+      category?: string;
       flags?: string[];
       month?: string;
     },
@@ -165,24 +166,50 @@ export class ExpensesService {
       isDeleted: false,
     };
 
+    const conditions: any[] = [];
+
     if (filters.search) {
-      where.description = {
-        contains: filters.search,
-        mode: 'insensitive',
-      };
+      conditions.push({
+        description: {
+          contains: filters.search,
+          mode: 'insensitive',
+        },
+      });
     }
 
     if (filters.member) {
-      where.OR = [
-        { paidBy: filters.member },
-        { participants: { some: { userId: filters.member } } },
-      ];
+      conditions.push({
+        OR: [
+          { paidBy: filters.member },
+          { participants: { some: { userId: filters.member } } },
+        ],
+      });
+    }
+
+    if (filters.category) {
+      if (filters.category.toLowerCase() === 'general') {
+        conditions.push({
+          OR: [
+            { category: { equals: 'General', mode: 'insensitive' } },
+            { category: null },
+          ],
+        });
+      } else {
+        conditions.push({
+          category: {
+            equals: filters.category,
+            mode: 'insensitive',
+          },
+        });
+      }
     }
 
     if (filters.flags && filters.flags.length > 0) {
-      where.flags = {
-        hasEvery: filters.flags,
-      };
+      conditions.push({
+        flags: {
+          hasEvery: filters.flags,
+        },
+      });
     }
 
     if (filters.month) {
@@ -190,10 +217,16 @@ export class ExpensesService {
       const [year, month] = filters.month.split('-').map(Number);
       const start = new Date(year, month - 1, 1);
       const end = new Date(year, month, 1);
-      where.expenseDate = {
-        gte: start,
-        lt: end,
-      };
+      conditions.push({
+        expenseDate: {
+          gte: start,
+          lt: end,
+        },
+      });
+    }
+
+    if (conditions.length > 0) {
+      where.AND = conditions;
     }
 
     const [data, total] = await Promise.all([

@@ -22,10 +22,11 @@ interface Member {
 
 interface MembersTabProps {
   groupId: string;
+  groupSlug?: string;
   members: Member[];
 }
 
-export default function MembersTab({ groupId, members }: MembersTabProps) {
+export default function MembersTab({ groupId, groupSlug, members }: MembersTabProps) {
   const { user } = useAuth();
   
   // Add Member form state
@@ -46,6 +47,9 @@ export default function MembersTab({ groupId, members }: MembersTabProps) {
         setTargetUserId('');
         setAddError('');
         invalidateQueries(`/groups/${groupId}`);
+        if (groupSlug) {
+          invalidateQueries(`/groups/${groupSlug}`);
+        }
         invalidateQueries('/groups');
       },
       onError: (err) => {
@@ -65,6 +69,9 @@ export default function MembersTab({ groupId, members }: MembersTabProps) {
         setRemoveMemberData(null);
         setRemoveError('');
         invalidateQueries(`/groups/${groupId}`);
+        if (groupSlug) {
+          invalidateQueries(`/groups/${groupSlug}`);
+        }
         invalidateQueries('/groups');
       },
       onError: (err) => {

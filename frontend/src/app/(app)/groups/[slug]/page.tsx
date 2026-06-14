@@ -16,13 +16,20 @@ export default function GroupDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const groupId = params?.id as string;
+  const slug = params?.slug as string;
   const { joinGroup, leaveGroup } = useSocket();
 
   // Active tab driven by URL search parameters
   const activeTab = searchParams?.get('tab') || 'expenses';
 
-  // Join and leave Socket.IO rooms matching this group
+  // Fetch group profile details using slug
+  const { data: group, loading, error } = useQuery(`/groups/${slug}`, () => api.get(`/groups/${slug}`), {
+    enabled: !!slug,
+  });
+
+  const groupId = group?.id;
+
+  // Join and leave Socket.IO rooms matching this group (still uses the real UUID groupId)
   useEffect(() => {
     if (groupId) {
       joinGroup(groupId);
@@ -31,11 +38,6 @@ export default function GroupDetailPage() {
       };
     }
   }, [groupId, joinGroup, leaveGroup]);
-
-  // Fetch group profile details
-  const { data: group, loading, error } = useQuery(`/groups/${groupId}`, () => api.get(`/groups/${groupId}`), {
-    enabled: !!groupId,
-  });
 
   if (loading) {
     return (
@@ -69,7 +71,7 @@ export default function GroupDetailPage() {
           description: 'Every charge ever recorded, grouped by month.',
           action: (
             <button
-              onClick={() => router.push(`/groups/${groupId}?tab=expenses&action=new-expense`)}
+              onClick={() => router.push(`/groups/${group.slug}?tab=expenses&action=new-expense`)}
               className="flex items-center gap-1.5 rounded-lg bg-[#047857] hover:bg-[#065f46] px-3.5 py-1.5 text-xs font-semibold text-white transition shadow-xs cursor-pointer"
             >
               <Plus size={14} />
@@ -84,7 +86,7 @@ export default function GroupDetailPage() {
           description: 'Raw paid vs owed, plus the minimum number of payments that clear the slate.',
           action: (
             <button
-              onClick={() => router.push(`/groups/${groupId}?tab=balances&action=record-payment`)}
+              onClick={() => router.push(`/groups/${group.slug}?tab=balances&action=record-payment`)}
               className="flex items-center gap-1.5 rounded-lg bg-[#047857] hover:bg-[#065f46] px-3.5 py-1.5 text-xs font-semibold text-white transition shadow-xs cursor-pointer"
             >
               Record payment
@@ -135,11 +137,11 @@ export default function GroupDetailPage() {
 
       {/* Tab Panel */}
       <div className="pt-2">
-        {activeTab === 'expenses' && <ExpenseList groupId={groupId} members={group.members} />}
-        {activeTab === 'balances' && <BalancesTab groupId={groupId} members={group.members} />}
-        {activeTab === 'members' && <MembersTab groupId={groupId} members={group.members} />}
-        {activeTab === 'import' && <ImportTab groupId={groupId} members={group.members} />}
-        {activeTab === 'audit' && <AuditTab groupId={groupId} />}
+        {activeTab === 'expenses' && groupId && <ExpenseList groupId={groupId} members={group.members} />}
+        {activeTab === 'balances' && groupId && <BalancesTab groupId={groupId} members={group.members} />}
+        {activeTab === 'members' && groupId && <MembersTab groupId={groupId} groupSlug={group.slug} members={group.members} />}
+        {activeTab === 'import' && groupId && <ImportTab groupId={groupId} members={group.members} />}
+        {activeTab === 'audit' && groupId && <AuditTab groupId={groupId} />}
       </div>
     </div>
   );

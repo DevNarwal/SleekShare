@@ -1,11 +1,11 @@
 import { IsNotEmpty, IsString, IsNumber, IsOptional, IsUUID, Min, IsDateString } from 'class-validator';
 
 export class CreateSettlementDto {
-  @IsUUID('4', { message: 'Invalid sender User ID' })
+  @IsString({ message: 'Invalid sender User ID' })
   @IsNotEmpty({ message: 'Sender User ID (fromUserId) is required' })
   fromUserId: string;
 
-  @IsUUID('4', { message: 'Invalid receiver User ID' })
+  @IsString({ message: 'Invalid receiver User ID' })
   @IsNotEmpty({ message: 'Receiver User ID (toUserId) is required' })
   toUserId: string;
 
@@ -23,11 +23,11 @@ export class CreateSettlementDto {
 }
 
 export class UpdateSettlementDto {
-  @IsUUID('4')
+  @IsString()
   @IsOptional()
   fromUserId?: string;
 
-  @IsUUID('4')
+  @IsString()
   @IsOptional()
   toUserId?: string;
 

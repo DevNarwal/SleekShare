@@ -72,6 +72,17 @@ export class ImportController {
     return { importedCount };
   }
 
+  // Reject all rows containing errors
+  @Post(':jobId/reject-errors')
+  async rejectErrors(
+    @Param('groupId') groupId: string,
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: any,
+  ) {
+    const rejectedCount = await this.importService.rejectAllErrors(groupId, jobId, user.id);
+    return { rejectedCount };
+  }
+
   // Approve a single row with resolutions
   @Post(':jobId/rows/:rowId/approve')
   async approveRow(

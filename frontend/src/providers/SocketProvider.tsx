@@ -94,6 +94,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.log('[Socket] member.joined:', data);
       if (data.groupId) {
         invalidateQueries(`/groups/${data.groupId}/members`);
+        invalidateQueries('/groups');
       }
     });
 
@@ -101,6 +102,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.log('[Socket] member.left:', data);
       if (data.groupId) {
         invalidateQueries(`/groups/${data.groupId}/members`);
+        invalidateQueries('/groups');
       }
     });
 

@@ -21,7 +21,7 @@ export class UpdateGroupDto {
 }
 
 export class AddMemberDto {
-  @IsUUID('4', { message: 'Invalid User ID format' })
+  @IsString({ message: 'Invalid User ID format' })
   @IsNotEmpty({ message: 'User ID is required' })
   userId: string;
 

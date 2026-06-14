@@ -3,6 +3,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateGroupDto, UpdateGroupDto, AddMemberDto } from './dto/group.dto';
 import { EventsGateway } from '../events/events.gateway';
 
+function slugify(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')           // Replace spaces with -
+    .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+    .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+    .replace(/^-+/, '')             // Trim - from start of text
+    .replace(/-+$/, '');            // Trim - from end of text
+}
+
 @Injectable()
 export class GroupsService {
   constructor(
@@ -13,9 +25,27 @@ export class GroupsService {
   // Create group and assign creator as ADMIN
   async createGroup(creatorId: string, dto: CreateGroupDto) {
     return this.prisma.$transaction(async (tx) => {
+      const baseSlug = slugify(dto.name) || 'group';
+      let slug = baseSlug;
+      let exists = await tx.group.findUnique({ where: { slug } });
+      if (exists) {
+        let isUnique = false;
+        let attempts = 0;
+        while (!isUnique && attempts < 10) {
+          const suffix = Math.random().toString(36).substring(2, 6);
+          slug = `${baseSlug}-${suffix}`;
+          const check = await tx.group.findUnique({ where: { slug } });
+          if (!check) {
+            isUnique = true;
+          }
+          attempts++;
+        }
+      }
+
       const group = await tx.group.create({
         data: {
           name: dto.name,
+          slug,
           icon: dto.icon,
           createdBy: creatorId,
         },
@@ -98,6 +128,7 @@ export class GroupsService {
 
       return {
         id: g.id,
+        slug: g.slug,
         name: g.name,
         icon: g.icon,
         memberCount: activeMemberships.length,
@@ -156,6 +187,7 @@ export class GroupsService {
 
     return {
       id: group.id,
+      slug: group.slug,
       name: group.name,
       icon: group.icon,
       memberCount: activeMemberships.length,

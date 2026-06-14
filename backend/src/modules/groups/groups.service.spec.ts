@@ -50,13 +50,21 @@ describe('GroupsService', () => {
 
   describe('createGroup', () => {
     it('should create group and assign creator as admin', async () => {
-      const mockGroup = { id: 'group-123', name: 'Trip', icon: '✈️' };
+      const mockGroup = { id: 'group-123', slug: 'trip', name: 'Trip', icon: '✈️' };
+      mockPrismaService.group.findUnique.mockResolvedValue(null);
       mockPrismaService.group.create.mockResolvedValue(mockGroup);
       mockPrismaService.membership.create.mockResolvedValue({});
 
       const result = await service.createGroup('user-creator', { name: 'Trip', icon: '✈️' });
 
-      expect(prisma.group.create).toHaveBeenCalled();
+      expect(prisma.group.create).toHaveBeenCalledWith({
+        data: {
+          name: 'Trip',
+          slug: 'trip',
+          icon: '✈️',
+          createdBy: 'user-creator',
+        },
+      });
       expect(prisma.membership.create).toHaveBeenCalledWith({
         data: {
           groupId: 'group-123',

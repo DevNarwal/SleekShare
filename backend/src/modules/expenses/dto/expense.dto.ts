@@ -9,7 +9,7 @@ export enum SplitMethod {
 }
 
 export class ParticipantDto {
-  @IsUUID('4', { message: 'Invalid participant user ID format' })
+  @IsString({ message: 'Invalid participant user ID format' })
   @IsNotEmpty({ message: 'Participant user ID is required' })
   userId: string;
 
@@ -42,7 +42,7 @@ export class CreateExpenseDto {
   @IsOptional()
   exchangeRate?: number;
 
-  @IsUUID('4', { message: 'Invalid paidBy user ID' })
+  @IsString({ message: 'Invalid paidBy user ID' })
   @IsNotEmpty({ message: 'Paid by is required' })
   paidBy: string;
 
@@ -88,7 +88,7 @@ export class UpdateExpenseDto {
   @IsOptional()
   exchangeRate?: number;
 
-  @IsUUID('4')
+  @IsString()
   @IsOptional()
   paidBy?: string;
 

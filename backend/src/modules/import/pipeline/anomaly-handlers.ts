@@ -303,12 +303,33 @@ export class InactiveMemberHandler implements AnomalyHandler {
     const startOfDay = new Date(dateObj);
     startOfDay.setHours(0, 0, 0, 0);
 
+    const warnedUsers = new Set<string>();
+
     const checkTimeline = (userKey: string, role: string) => {
       const resolved = context.resolvedUsers.get(userKey.toLowerCase());
       if (!resolved) return;
 
+      const userId = resolved.id;
+      if (warnedUsers.has(userId)) return;
+
       const groupMemberships = resolved.memberships.filter((m) => m.groupId === context.groupId);
       if (groupMemberships.length === 0) return; // participant mismatch covers this
+
+      // If the date is before their first join date, PRE_MEMBERSHIP_DATE covers it; suppress INACTIVE_MEMBER
+      let earliestJoin: Date | null = null;
+      for (const m of groupMemberships) {
+        const j = new Date(m.joinedAt);
+        if (!earliestJoin || j < earliestJoin) {
+          earliestJoin = j;
+        }
+      }
+
+      if (earliestJoin) {
+        earliestJoin.setHours(0, 0, 0, 0);
+        if (startOfDay < earliestJoin) {
+          return;
+        }
+      }
 
       // Check if any membership window covers the date
       const active = groupMemberships.some((m) => {
@@ -321,6 +342,7 @@ export class InactiveMemberHandler implements AnomalyHandler {
       });
 
       if (!active) {
+        warnedUsers.add(userId);
         results.push({
           anomalyType: 'INACTIVE_MEMBER',
           severity: 'warning',
@@ -344,12 +366,18 @@ export class InactiveMemberHandler implements AnomalyHandler {
 export class ParticipantMismatchHandler implements AnomalyHandler {
   detect(row: NormalizedRow, context: AnomalyContext): AnomalyResult[] {
     const results: AnomalyResult[] = [];
+    const warnedUsers = new Set<string>();
+
     const checkMembership = (userKey: string, role: string) => {
       const resolved = context.resolvedUsers.get(userKey.toLowerCase());
       if (!resolved) return;
 
+      const userId = resolved.id;
+      if (warnedUsers.has(userId)) return;
+
       const isMember = resolved.memberships.some((m) => m.groupId === context.groupId);
       if (!isMember) {
+        warnedUsers.add(userId);
         results.push({
           anomalyType: 'PARTICIPANT_MISMATCH',
           severity: 'warning',
@@ -399,9 +427,14 @@ export class PreMembershipDateHandler implements AnomalyHandler {
     if (!dateObj) return [];
 
     const results: AnomalyResult[] = [];
+    const warnedUsers = new Set<string>();
+
     const checkPreMembership = (userKey: string, role: string) => {
       const resolved = context.resolvedUsers.get(userKey.toLowerCase());
       if (!resolved) return;
+
+      const userId = resolved.id;
+      if (warnedUsers.has(userId)) return;
 
       const groupMemberships = resolved.memberships.filter((m) => m.groupId === context.groupId);
       if (groupMemberships.length === 0) return;
@@ -421,6 +454,7 @@ export class PreMembershipDateHandler implements AnomalyHandler {
         startOfDay.setHours(0, 0, 0, 0);
 
         if (startOfDay < earliestJoin) {
+          warnedUsers.add(userId);
           results.push({
             anomalyType: 'PRE_MEMBERSHIP_DATE',
             severity: 'warning',
@@ -441,6 +475,7 @@ export class PreMembershipDateHandler implements AnomalyHandler {
     return results;
   }
 }
+
 
 export class LargeAmountHandler implements AnomalyHandler {
   detect(row: NormalizedRow, context: AnomalyContext): AnomalyResult[] {

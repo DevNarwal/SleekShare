@@ -11,7 +11,7 @@ interface ImportTabProps {
   members: any[];
 }
 
-export default function ImportTab({ groupId }: ImportTabProps) {
+export default function ImportTab({ groupId, members }: ImportTabProps) {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -101,6 +101,7 @@ export default function ImportTab({ groupId }: ImportTabProps) {
       <ReviewQueue
         groupId={groupId}
         jobId={activeJobId}
+        members={members || []}
         onClose={() => {
           setActiveJobId(null);
           refetch().catch(() => {});

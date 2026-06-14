@@ -114,41 +114,43 @@ export default function AppShell({ children }: AppShellProps) {
     { name: 'Groups', href: '/dashboard', icon: Users, isActive: pathname === '/dashboard' },
   ];
 
-  const groupWorkspaceLinks = activeGroupId
+  const resolvedGroupSlug = activeGroup?.slug || activeGroupId;
+
+  const groupWorkspaceLinks = resolvedGroupSlug
     ? [
         {
           name: 'Expenses',
-          href: `/groups/${activeGroupId}?tab=expenses`,
+          href: `/groups/${resolvedGroupSlug}?tab=expenses`,
           icon: Receipt,
           isActive: !!pathGroupId && tab === 'expenses',
         },
         {
           name: 'Balances',
-          href: `/groups/${activeGroupId}?tab=balances`,
+          href: `/groups/${resolvedGroupSlug}?tab=balances`,
           icon: CreditCard,
           isActive: !!pathGroupId && tab === 'balances',
         },
         {
           name: 'Settlements',
-          href: `/groups/${activeGroupId}?tab=balances`, // settlements goes to balances view
+          href: `/groups/${resolvedGroupSlug}?tab=balances`, // settlements goes to balances view
           icon: Coins,
           isActive: false, // passive
         },
       ]
     : [];
 
-  const dataOpsLinks = activeGroupId
+  const dataOpsLinks = resolvedGroupSlug
     ? [
         {
           name: 'CSV Import',
-          href: `/groups/${activeGroupId}?tab=import`,
+          href: `/groups/${resolvedGroupSlug}?tab=import`,
           icon: UploadCloud,
           isActive: !!pathGroupId && tab === 'import',
           badge: pendingImportsCount > 0 ? pendingImportsCount : null,
         },
         {
           name: 'Audit Log',
-          href: `/groups/${activeGroupId}?tab=audit`,
+          href: `/groups/${resolvedGroupSlug}?tab=audit`,
           icon: History,
           isActive: !!pathGroupId && tab === 'audit',
         },
@@ -353,10 +355,10 @@ export default function AppShell({ children }: AppShellProps) {
             </button>
 
             {/* Quick action button: New Expense */}
-            {activeGroupId && (
+            {resolvedGroupSlug && (
               <button
                 onClick={() => {
-                  router.push(`/groups/${activeGroupId}?tab=expenses&action=new-expense`);
+                  router.push(`/groups/${resolvedGroupSlug}?tab=expenses&action=new-expense`);
                 }}
                 className="flex items-center gap-1.5 rounded-lg bg-[#047857] hover:bg-[#065f46] px-3.5 py-1.5 text-xs font-semibold text-white transition shadow-xs cursor-pointer"
               >

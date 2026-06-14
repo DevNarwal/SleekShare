@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useMutation, invalidateQueries } from '@/hooks/useQuery';
 import { api } from '@/lib/api';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
   TrendingUp,
   TrendingDown,
@@ -37,10 +38,71 @@ interface BalancesTabProps {
 
 export default function BalancesTab({ groupId, members }: BalancesTabProps) {
   const { user } = useAuth();
+  
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [settleModal, setSettleModal] = useState<{ from: string; to: string; amount: number } | null>(null);
   const [settleDate, setSettleDate] = useState(new Date().toISOString().split('T')[0]);
   const [settleNote, setSettleNote] = useState('');
   const [settleError, setSettleError] = useState('');
+
+  // Editable Form States
+  const [payerId, setPayerId] = useState('');
+  const [receiverId, setReceiverId] = useState('');
+  const [amount, setAmount] = useState('');
+
+  // Listen to the URL action=record-payment parameter
+  useEffect(() => {
+    const action = searchParams?.get('action');
+    if (action === 'record-payment') {
+      if (!settleModal) {
+        setSettleModal({ from: '', to: '', amount: 0 });
+      }
+    } else {
+      if (settleModal && !settleModal.from && !settleModal.to) {
+        setSettleModal(null);
+      }
+    }
+  }, [searchParams]);
+
+  // Sync editable form states when settleModal changes
+  useEffect(() => {
+    if (settleModal) {
+      setPayerId(settleModal.from || '');
+      setReceiverId(settleModal.to || '');
+      setAmount(settleModal.amount > 0 ? String(settleModal.amount) : '');
+    } else {
+      setPayerId('');
+      setReceiverId('');
+      setAmount('');
+    }
+  }, [settleModal]);
+
+  const handleCloseModal = () => {
+    setSettleModal(null);
+    setSettleNote('');
+    setSettleError('');
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.delete('action');
+    router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  const checkMemberActiveOnDate = (m: Member, dateStr: string) => {
+    const checkDate = new Date(dateStr);
+    checkDate.setHours(0, 0, 0, 0);
+
+    const joined = new Date(m.joinedAt);
+    joined.setHours(0, 0, 0, 0);
+
+    const left = m.leftAt ? new Date(m.leftAt) : null;
+    if (left) {
+      left.setHours(0, 0, 0, 0);
+    }
+
+    return joined <= checkDate && (left === null || left >= checkDate);
+  };
   
   // Explain states
   const [explainFrom, setExplainFrom] = useState(user?.id || '');
@@ -72,9 +134,7 @@ export default function BalancesTab({ groupId, members }: BalancesTabProps) {
       onSuccess: () => {
         invalidateQueries(`/groups/${groupId}/balances`);
         invalidateQueries(`/groups/${groupId}/settlements`);
-        setSettleModal(null);
-        setSettleNote('');
-        setSettleError('');
+        handleCloseModal();
         if (explainTrigger) refetchExplain().catch(() => {});
       },
       onError: (err) => {
@@ -100,13 +160,42 @@ export default function BalancesTab({ groupId, members }: BalancesTabProps) {
 
   const handleSettleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!settleModal) return;
     setSettleError('');
 
+    if (!payerId) {
+      setSettleError('Sender (payer) is required');
+      return;
+    }
+    if (!receiverId) {
+      setSettleError('Receiver is required');
+      return;
+    }
+    if (payerId === receiverId) {
+      setSettleError('Sender and receiver cannot be the same user');
+      return;
+    }
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) {
+      setSettleError('Settlement amount must be greater than 0');
+      return;
+    }
+
+    const payerMember = members.find((m) => m.user.id === payerId);
+    if (payerMember && !checkMemberActiveOnDate(payerMember, settleDate)) {
+      setSettleError(`The sender (${payerMember.user.displayName}) was not an active member on the settlement date (${settleDate})`);
+      return;
+    }
+
+    const receiverMember = members.find((m) => m.user.id === receiverId);
+    if (receiverMember && !checkMemberActiveOnDate(receiverMember, settleDate)) {
+      setSettleError(`The receiver (${receiverMember.user.displayName}) was not an active member on the settlement date (${settleDate})`);
+      return;
+    }
+
     recordSettlement({
-      fromUserId: settleModal.from,
-      toUserId: settleModal.to,
-      amountInr: settleModal.amount,
+      fromUserId: payerId,
+      toUserId: receiverId,
+      amountInr: amt,
       settlementDate: new Date(settleDate).toISOString(),
       note: settleNote.trim() || undefined,
     });
@@ -353,7 +442,7 @@ export default function BalancesTab({ groupId, members }: BalancesTabProps) {
       {/* Settle Up Dialog */}
       {settleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setSettleModal(null)} className="absolute inset-0 bg-black/40 backdrop-blur-xs"></div>
+          <div onClick={handleCloseModal} className="absolute inset-0 bg-black/40 backdrop-blur-xs"></div>
           
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl relative z-10 overflow-hidden">
             <h3 className="text-lg font-bold text-slate-900 font-serif mb-4">Record Settlement</h3>
@@ -365,19 +454,67 @@ export default function BalancesTab({ groupId, members }: BalancesTabProps) {
             )}
 
             <form onSubmit={handleSettleSubmit} className="space-y-4">
-              <div className="bg-emerald-50/40 border border-emerald-100 rounded-xl p-4 text-center text-slate-700">
-                <span className="font-semibold text-slate-950">{getUserName(settleModal.from)}</span>
-                <span className="mx-2 text-slate-500">pays</span>
-                <span className="font-semibold text-slate-950">{getUserName(settleModal.to)}</span>
-                <div className="text-2xl font-bold text-[#047857] mt-2">₹{settleModal.amount.toFixed(2)}</div>
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1 text-xs">Sender (Who Pays) *</label>
+                <select
+                  required
+                  className="w-full rounded-lg bg-white border border-slate-200 px-3 py-2 text-slate-700 focus:outline-none focus:border-[#047857] focus:ring-1 focus:ring-[#047857] cursor-pointer"
+                  value={payerId}
+                  onChange={(e) => setPayerId(e.target.value)}
+                >
+                  <option value="">Select Payer</option>
+                  {members.map((m) => {
+                    const isActive = checkMemberActiveOnDate(m, settleDate);
+                    return (
+                      <option key={m.user.id} value={m.user.id} disabled={!isActive}>
+                        {m.user.displayName} {!isActive ? '(Inactive on date)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1 text-xs">Settlement Date</label>
+                <label className="block text-slate-700 font-semibold mb-1 text-xs">Receiver (Who is Paid) *</label>
+                <select
+                  required
+                  className="w-full rounded-lg bg-white border border-slate-200 px-3 py-2 text-slate-700 focus:outline-none focus:border-[#047857] focus:ring-1 focus:ring-[#047857] cursor-pointer"
+                  value={receiverId}
+                  onChange={(e) => setReceiverId(e.target.value)}
+                >
+                  <option value="">Select Receiver</option>
+                  {members
+                    .filter((m) => m.user.id !== payerId)
+                    .map((m) => {
+                      const isActive = checkMemberActiveOnDate(m, settleDate);
+                      return (
+                        <option key={m.user.id} value={m.user.id} disabled={!isActive}>
+                          {m.user.displayName} {!isActive ? '(Inactive on date)' : ''}
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1 text-xs">Amount (INR) *</label>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  className="w-full rounded-lg bg-white border border-slate-200 px-3.5 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#047857] focus:ring-1 focus:ring-[#047857] transition"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1 text-xs">Settlement Date *</label>
                 <input
                   type="date"
                   required
-                  className="w-full rounded-lg bg-white border border-slate-200 px-3 py-2 text-slate-800 focus:outline-none focus:border-[#047857] focus:ring-1 focus:ring-[#047857]"
+                  className="w-full rounded-lg bg-white border border-slate-200 px-3.5 py-2 text-slate-800 focus:outline-none focus:border-[#047857] focus:ring-1 focus:ring-[#047857]"
                   value={settleDate}
                   onChange={(e) => setSettleDate(e.target.value)}
                 />
@@ -397,7 +534,7 @@ export default function BalancesTab({ groupId, members }: BalancesTabProps) {
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
                 <button
                   type="button"
-                  onClick={() => setSettleModal(null)}
+                  onClick={handleCloseModal}
                   className="rounded-lg bg-white border border-slate-200 px-4 py-2.5 text-slate-700 hover:bg-slate-50 transition cursor-pointer text-xs font-semibold"
                 >
                   Cancel
