@@ -2,10 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { GroupsService } from './groups.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { EventsGateway } from '../events/events.gateway';
 
 describe('GroupsService', () => {
   let service: GroupsService;
   let prisma: PrismaService;
+
+  const mockEventsGateway = {
+    emitToRoom: jest.fn(),
+  };
 
   const mockPrismaService = {
     $transaction: jest.fn(),
@@ -31,6 +36,7 @@ describe('GroupsService', () => {
       providers: [
         GroupsService,
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: EventsGateway, useValue: mockEventsGateway },
       ],
     }).compile();
 

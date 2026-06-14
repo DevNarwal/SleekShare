@@ -1,10 +1,14 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGroupDto, UpdateGroupDto, AddMemberDto } from './dto/group.dto';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class GroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   // Create group and assign creator as ADMIN
   async createGroup(creatorId: string, dto: CreateGroupDto) {
@@ -215,7 +219,7 @@ export class GroupsService {
       },
     });
 
-    return {
+    const result = {
       id: membership.id,
       groupId: membership.groupId,
       userId: membership.userId,
@@ -225,6 +229,10 @@ export class GroupsService {
       status: 'ACTIVE',
       user: membership.user,
     };
+
+    this.eventsGateway.emitToRoom(`group:${groupId}`, 'member.joined', { groupId, membership: result });
+
+    return result;
   }
 
   // Remove member from group (sets leftAt timestamp)
@@ -260,7 +268,7 @@ export class GroupsService {
       },
     });
 
-    return {
+    const result = {
       id: updated.id,
       groupId: updated.groupId,
       userId: updated.userId,
@@ -270,6 +278,10 @@ export class GroupsService {
       status: 'LEFT',
       user: updated.user,
     };
+
+    this.eventsGateway.emitToRoom(`group:${groupId}`, 'member.left', { groupId, userId });
+
+    return result;
   }
 
   // List group members
@@ -328,5 +340,24 @@ export class GroupsService {
       leftAt: membership.leftAt,
       status: isActive ? 'ACTIVE' : 'LEFT',
     };
+  }
+
+  // Get group audit logs
+  async getGroupAuditLogs(groupId: string) {
+    return this.prisma.auditLog.findMany({
+      where: { groupId },
+      include: {
+        actor: {
+          select: {
+            id: true,
+            email: true,
+            displayName: true,
+            avatarInitials: true,
+            avatarColor: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

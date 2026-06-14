@@ -79,4 +79,12 @@ export class GroupsController {
   ) {
     return this.groupsService.getMyMembership(id, user.id);
   }
+
+  @Get(':id/audit')
+  @UseGuards(GroupMemberGuard)
+  async getGroupAuditLogs(
+    @Param('id') id: string,
+  ) {
+    return this.groupsService.getGroupAuditLogs(id);
+  }
 }

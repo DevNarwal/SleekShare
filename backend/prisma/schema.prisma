@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -69,15 +68,16 @@ model Group {
 }
 
 model Membership {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  groupId   String    @map("group_id") @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  role      String    @default("member") @db.VarChar(20)
-  joinedAt  DateTime  @map("joined_at") @db.Timestamptz
-  leftAt    DateTime? @map("left_at") @db.Timestamptz
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId   String           @map("group_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  role      String           @default("member") @db.VarChar(20)
+  joinedAt  DateTime         @map("joined_at") @db.Timestamptz
+  leftAt    DateTime?        @map("left_at") @db.Timestamptz
+  source    MembershipSource @default(MANUAL)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  group     Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, userId, joinedAt])
   @@map("memberships")
@@ -131,14 +131,15 @@ model Expense {
   createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz
 
-  group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  currency     Currency             @relation(fields: [currencyCode], references: [code])
-  payer        User                 @relation("ExpensesPaid", fields: [paidBy], references: [id])
-  creator      User                 @relation("ExpensesCreated", fields: [createdBy], references: [id])
-  importJob    ImportJob?           @relation(fields: [importJobId], references: [id])
-  participants ExpenseParticipant[]
-  messages     Message[]
-  importRows   ImportRow[]
+  group          Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  currency       Currency             @relation(fields: [currencyCode], references: [code])
+  payer          User                 @relation("ExpensesPaid", fields: [paidBy], references: [id])
+  creator        User                 @relation("ExpensesCreated", fields: [createdBy], references: [id])
+  importJob      ImportJob?           @relation(fields: [importJobId], references: [id])
+  participants   ExpenseParticipant[]
+  messages       Message[]
+  importRow      ImportRow?
+  ledgerEntries  LedgerEntry[]
 
   @@map("expenses")
 }
@@ -175,26 +176,32 @@ model Settlement {
   fromUser User  @relation("SettlementsSent", fields: [fromUserId], references: [id])
   toUser   User  @relation("SettlementsReceived", fields: [toUserId], references: [id])
   creator  User  @relation("SettlementsCreated", fields: [createdBy], references: [id])
+  ledgerEntries LedgerEntry[]
 
   @@map("settlements")
 }
 
 model LedgerEntry {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  groupId   String   @map("group_id") @db.Uuid
-  entryType String   @map("entry_type") @db.VarChar(50)
-  debtorId  String   @map("debtor_id") @db.Uuid
-  creditorId String  @map("creditor_id") @db.Uuid
-  amountInr Decimal  @map("amount_inr") @db.Decimal(18, 2)
-  entryDate DateTime @map("entry_date") @db.Date
-  note      String?
-  createdBy String   @map("created_by") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId      String      @map("group_id") @db.Uuid
+  entryType    String      @map("entry_type") @db.VarChar(50)
+  debtorId     String      @map("debtor_id") @db.Uuid
+  creditorId   String      @map("creditor_id") @db.Uuid
+  amountInr    Decimal     @map("amount_inr") @db.Decimal(18, 2)
+  entryDate    DateTime    @map("entry_date") @db.Date
+  note         String?
+  isDeleted    Boolean     @default(false) @map("is_deleted")
+  expenseId    String?     @map("expense_id") @db.Uuid
+  settlementId String?     @map("settlement_id") @db.Uuid
+  createdBy    String      @map("created_by") @db.Uuid
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  debtor   User  @relation("DebtorLedger", fields: [debtorId], references: [id])
-  creditor User  @relation("CreditorLedger", fields: [creditorId], references: [id])
-  creator  User  @relation("LedgerCreated", fields: [createdBy], references: [id])
+  group      Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  debtor     User        @relation("DebtorLedger", fields: [debtorId], references: [id])
+  creditor   User        @relation("CreditorLedger", fields: [creditorId], references: [id])
+  creator    User        @relation("LedgerCreated", fields: [createdBy], references: [id])
+  expense    Expense?    @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  settlement Settlement? @relation(fields: [settlementId], references: [id], onDelete: Cascade)
 
   @@map("ledger_entries")
 }
@@ -228,7 +235,7 @@ model ImportRow {
   rawData          Json      @map("raw_data")
   parsedData       Json?     @map("parsed_data")
   status           String    @default("pending") @db.VarChar(20)
-  createdExpenseId String?   @map("created_expense_id") @db.Uuid
+  createdExpenseId String?   @unique @map("created_expense_id") @db.Uuid
 
   job            ImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
   createdExpense Expense?  @relation(fields: [createdExpenseId], references: [id])
@@ -283,4 +290,9 @@ model Message {
   author  User    @relation(fields: [authorId], references: [id])
 
   @@map("messages")
+}
+
+enum MembershipSource {
+  MANUAL
+  IMPORT_RESOLUTION
 }
