@@ -6,7 +6,8 @@ import { useAuth } from './AuthProvider';
 import { api } from '../lib/api';
 import { invalidateQueries } from '../hooks/useQuery';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+const BACKEND_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
 
 interface SocketContextType {
   socket: Socket | null;

@@ -18,9 +18,18 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // CORS Configuration
+  const allowedOrigins = [
+    'http://localhost:5173', // Vite dev
+    'http://localhost:3000', // Next dev
+    'https://your-frontend.vercel.app',
+  ];
+  if (process.env.FRONTEND_URL) {
+    allowedOrigins.push(process.env.FRONTEND_URL);
+  }
+
   app.enableCors({
-    origin: true, // Allow all origins for dev, can restrict to client url in production
-    credentials: true, // Essential for HttpOnly cookies
+    origin: allowedOrigins,
+    credentials: true,
   });
 
   // Global Validation
