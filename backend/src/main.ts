@@ -21,6 +21,7 @@ async function bootstrap() {
   const allowedOrigins = [
     'http://localhost:5173', // Vite dev
     'http://localhost:3000', // Next dev
+    'https://sleek-share.vercel.app',
     'https://your-frontend.vercel.app',
   ];
   if (process.env.FRONTEND_URL) {
