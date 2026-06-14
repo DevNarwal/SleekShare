@@ -18,7 +18,7 @@ RUN npx prisma generate
 
 # Build the NestJS application
 RUN npm run build
-RUN echo "=== DIST CONTENTS ===" && find dist -type f
+# RUN echo "=== DIST CONTENTS ===" && find dist -type f
 
 # Prune development dependencies
 RUN npm prune --production
