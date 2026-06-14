@@ -6,6 +6,8 @@ import { useAuth } from './AuthProvider';
 import { api } from '../lib/api';
 import { invalidateQueries } from '../hooks/useQuery';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
 interface SocketContextType {
   socket: Socket | null;
   connected: boolean;
@@ -33,7 +35,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     }
 
     const tokenVal = api.getAccessToken() || '';
-    const socketInstance = io('http://localhost:3001', {
+    const socketInstance = io(BACKEND_URL, {
       query: { token: tokenVal },
       auth: { token: tokenVal },
       autoConnect: true,

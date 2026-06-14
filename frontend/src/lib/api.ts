@@ -1,3 +1,5 @@
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
 class ApiClient {
   private accessToken: string | null = null;
   private isRefreshing = false;
@@ -12,7 +14,7 @@ class ApiClient {
   }
 
   async request(path: string, options: RequestInit = {}): Promise<any> {
-    const url = `http://localhost:3001/api${path}`;
+    const url = `${BACKEND_URL}/api${path}`;
     const headers = new Headers(options.headers || {});
     
     if (this.accessToken) {
@@ -79,7 +81,7 @@ class ApiClient {
     this.isRefreshing = true;
 
     try {
-      const url = 'http://localhost:3001/api/auth/refresh';
+      const url = `${BACKEND_URL}/api/auth/refresh`;
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
