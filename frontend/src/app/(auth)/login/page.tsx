@@ -103,7 +103,35 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm font-semibold">
+        {/* Quick Demo Login */}
+        <div className="mt-6 border-t border-slate-100 pt-5">
+          <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+            Quick Login (Demo Accounts)
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { name: 'Aisha Khan', email: 'aisha@flat.co' },
+              { name: 'Rohan Mehta', email: 'rohan@flat.co' },
+              { name: 'Priya Iyer', email: 'priya@flat.co' },
+              { name: 'Sam Patel', email: 'sam@flat.co' },
+            ].map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                onClick={() => {
+                  setEmail(account.email);
+                  setPassword('password123');
+                }}
+                className="flex flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 p-2 text-xs transition cursor-pointer text-slate-700 hover:border-slate-300"
+              >
+                <span className="font-semibold text-slate-800">{account.name}</span>
+                <span className="text-[10px] text-slate-500">{account.email}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 text-center text-sm font-semibold">
           <span className="text-slate-500">Don't have an account? </span>
           <Link href="/register" className="text-[#047857] hover:underline">
             Sign Up

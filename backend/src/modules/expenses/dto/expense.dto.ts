@@ -2,10 +2,10 @@ import { IsNotEmpty, IsString, IsNumber, IsOptional, IsUUID, IsEnum, IsArray, Va
 import { Type } from 'class-transformer';
 
 export enum SplitMethod {
-  EQUAL = 'equal',
-  UNEQUAL = 'unequal',
-  PERCENTAGE = 'percentage',
-  SHARE = 'share',
+  EQUAL = 'EQUAL',
+  UNEQUAL = 'UNEQUAL',
+  PERCENTAGE = 'PERCENTAGE',
+  SHARE = 'SHARE',
 }
 
 export class ParticipantDto {
