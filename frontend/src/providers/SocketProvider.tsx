@@ -6,7 +6,20 @@ import { useAuth } from './AuthProvider';
 import { api } from '../lib/api';
 import { invalidateQueries } from '../hooks/useQuery';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+const getApiUrl = () => {
+  let url = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+  // Clean up any double slashes (except the protocol http:// or https://)
+  url = url.replace(/([^:]\/)\/+/g, '$1');
+  if (url.endsWith('/')) {
+    url = url.slice(0, -1);
+  }
+  if (!url.endsWith('/api')) {
+    url = `${url}/api`;
+  }
+  return url;
+};
+
+const API_URL = getApiUrl();
 const BACKEND_URL = API_URL.endsWith('/api') ? API_URL.slice(0, -4) : API_URL;
 
 interface SocketContextType {
