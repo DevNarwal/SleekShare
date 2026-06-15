@@ -70,15 +70,23 @@ export class AuthService {
 
   // Validate credentials and login user
   async login(dto: LoginDto) {
+    const emailToUse = dto.email.trim().toLowerCase();
+    console.log(`[AuthService] Login attempt for: "${dto.email}" (processed as: "${emailToUse}")`);
+    
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
+      where: { email: emailToUse },
     });
+    
     if (!user) {
+      console.log(`[AuthService] Login failed: User with email "${emailToUse}" not found.`);
       throw new UnauthorizedException('Invalid email or password');
     }
 
     const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
+    console.log(`[AuthService] Password comparison match: ${isMatch}`);
+    
     if (!isMatch) {
+      console.log(`[AuthService] Login failed: Password does not match for user "${emailToUse}".`);
       throw new UnauthorizedException('Invalid email or password');
     }
 
